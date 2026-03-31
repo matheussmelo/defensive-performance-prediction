@@ -235,7 +235,7 @@ class GradientSportsClient:
             "setpieceTypeDescription",
             "touches",
             "touchesInBox",
-            "videoMissing"
+            "videoMissing",
             "possessionEvents",
             "homePlayers",
             "awayPlayers",
