@@ -186,32 +186,29 @@ class GradientSportsClient:
             "startGameClock",
             "startFormattedGameClock",
             "homeTeam",
+            "details",
+            "homePlayers",
+            "awayPlayers",
+            "balls"
         ]
         rows = []
         for ev in game_events:
             base = {f: ev.get(f) for f in scalar_fields}
             if ev.get("player"):
-                base["player.id"] = ev["player"].get("id")
-                base["player.name"] = ev["player"].get("name")
+                base["player.id"] = ev["player"].get("id", None)
+                base["player.name"] = ev["player"].get("name", None)
+            else:
+                base["player.id"] = None
+                base["player.name"] = None
+                
             if ev.get("team"):
-                base["team.id"] = ev["team"].get("id")
-                base["team.name"] = ev["team"].get("name")
-            for side in ("home_players", "away_players"):
-                for p in ev.get(side, []):
-                    rows.append(
-                        {
-                            **base,
-                            "side": "home" if side == "home_players" else "away",
-                            "onpitch.player.id": p.get("player", {}).get("id"),
-                            "onpitch.player.name": p.get("player", {}).get("name"),
-                            "onpitch.jerseyNum": p.get("jerseyNum"),
-                            "onpitch.x": p.get("x"),
-                            "onpitch.y": p.get("y"),
-                            "onpitch.speed": p.get("speed"),
-                            "onpitch.visibility": p.get("visibility"),
-                            "onpitch.confidence": p.get("confidence"),
-                        }
-                    )
+                base["team.id"] = ev["team"].get("id", None)
+                base["team.name"] = ev["team"].get("name", None)
+            else:
+                base["team.id"] = None
+                base["team.name"] = None
+            
+            rows.append(base)                
         return pd.DataFrame(rows)
 
     @staticmethod
@@ -238,37 +235,30 @@ class GradientSportsClient:
             "setpieceTypeDescription",
             "touches",
             "touchesInBox",
+            "videoMissing",
+            "possessionEvents",
+            "homePlayers",
+            "awayPlayers",
+            "balls"
         ]
         rows = []
         for ev in game_events:
             base = {f: ev.get(f) for f in event_scalars}
             if ev.get("team"):
-                base["team.id"] = ev["team"].get("id")
-                base["team.name"] = ev["team"].get("name")
+                base["team.id"] = ev["team"].get("id", None)
+                base["team.name"] = ev["team"].get("name", None)
+            else:
+                base["team.id"] = None
+                base["team.name"] = None                
+                
             if ev.get("player"):
-                base["player.id"] = ev["player"].get("id")
-                base["player.name"] = ev["player"].get("name")
-            for pe in ev.get("possessionEvents", []):
-                row = {
-                    **base,
-                    "poss.id": pe.get("id"),
-                    "poss.type": pe.get("possessionEventType"),
-                    "poss.typeDescription": pe.get("possessionEventTypeDescription"),
-                    "poss.startGameClock": pe.get("startGameClock"),
-                    "poss.endGameClock": pe.get("endGameClock"),
-                    "poss.period": pe.get("period"),
-                    "poss.nonEvent": pe.get("nonEvent"),
-                    "poss.ballHeightType": pe.get("ballHeightType"),
-                    "poss.highPointType": pe.get("highPointType"),
-                    "poss.bodyType": pe.get("bodyType"),
-                }
-                if pe.get("player"):
-                    row["poss.player.id"] = pe["player"].get("id")
-                    row["poss.player.name"] = pe["player"].get("name")
-                if pe.get("team"):
-                    row["poss.team.id"] = pe["team"].get("id")
-                    row["poss.team.name"] = pe["team"].get("name")
-                rows.append(row)
+                base["player.id"] = ev["player"].get("id", None)
+                base["player.name"] = ev["player"].get("name", None)
+            else:
+                base["player.id"] = None
+                base["player.name"] = None                
+
+            rows.append(base)
         return pd.DataFrame(rows)
 
     # ------------------------------------------------------------------
@@ -560,14 +550,6 @@ class GradientSportsClient:
         touches / touchesInBox   int
         team.id / .name
         player.id / .name
-        poss.id                  int   – Possession event ID
-        poss.type / .typeDescription
-        poss.startGameClock / .endGameClock
-        poss.period              int
-        poss.nonEvent            bool
-        poss.ballHeightType / .highPointType / .bodyType
-        poss.player.id / .name
-        poss.team.id / .name
         """
         raw = self._get(f"/games/{game_id}/game_events")
         if as_dataframe:
@@ -596,16 +578,10 @@ class GradientSportsClient:
         period / periodDescription
         eventType / eventTypeDescription
         startGameClock / startFormattedGameClock
+        homePlayers / awayPlayers / balls
         homeTeam                 bool
         player.id / .name        – Principal player of the event
         team.id / .name
-        side                     str   – "home" or "away"
-        onpitch.player.id / .name
-        onpitch.jerseyNum        str
-        onpitch.x / .y           float – Position in metres
-        onpitch.speed            float – Speed in km/h
-        onpitch.visibility       str   – "VISIBLE" | "ESTIMATED"
-        onpitch.confidence       str   – "HIGH" | "MEDIUM" | "LOW"
         """
         raw = self._get(f"/games/{game_id}/events")
         if as_dataframe:
