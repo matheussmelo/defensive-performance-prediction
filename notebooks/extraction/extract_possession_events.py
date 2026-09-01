@@ -4,6 +4,7 @@ import pyarrow.parquet as pq
 
 import sys
 import os
+import shutil
 
 import asyncio
 
@@ -27,22 +28,31 @@ semaphore = asyncio.Semaphore(SEM_LIMIT)
 TASKS_BATCH = 50  # ajuste conforme sua máquina
 
 # Base de saída
-BASE_EVENTS_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "events_teste"
+BASE_EVENTS_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "events"
 BASE_EVENTS_DIR.mkdir(parents=True, exist_ok=True)
 
 # Schema fixo pros campos aninhados (homePlayers_parsed/awayPlayers_parsed/balls_parsed/details_parsed) —
 # grava já estruturado no parquet, sem passar por JSON string. Substitui o que
 # antes só existia como pós-processamento em parse_possession_events.ipynb. Mantém
 # o sufixo _parsed nos nomes de coluna por convenção, mesmo já vindo estruturado.
+# Schema completo do tracking (todos os campos originais da API) — a seleção de
+# quais usar fica pra etapa de engenharia, não pra extração.
 _PA_PLAYER_STRUCT = pa.struct([
     pa.field("x", pa.float32()),
     pa.field("y", pa.float32()),
-    pa.field("player", pa.struct([pa.field("name", pa.string())])),
+    pa.field("player", pa.struct([
+        pa.field("id", pa.int32()),
+        pa.field("name", pa.string()),
+    ])),
+    pa.field("visibility", pa.string()),
+    pa.field("confidence", pa.string()),
+    pa.field("jerseyNum", pa.string()),
 ])
 _PA_BALL_STRUCT = pa.struct([
     pa.field("x", pa.float32()),
     pa.field("y", pa.float32()),
     pa.field("z", pa.float32()),
+    pa.field("visibility", pa.string()),
 ])
 
 NESTED_SCHEMA_OVERRIDES = {
@@ -88,23 +98,34 @@ EVENT_OUTCOME_DESC_KEY = {
 }
 
 
-def _slim_player(p):
-    """Reduz um jogador do tracking só aos campos usados (x, y, player.name)."""
+def _parse_player(p):
+    """Normaliza um jogador do tracking pro schema completo (x, y, player.id/name, visibility, confidence, jerseyNum)."""
     if not isinstance(p, dict):
         return None
     inner = p.get("player") or {}
     return {
         "x": p.get("x"),
         "y": p.get("y"),
-        "player": {"name": inner.get("name") if isinstance(inner, dict) else None},
+        "player": {
+            "id": inner.get("id") if isinstance(inner, dict) else None,
+            "name": inner.get("name") if isinstance(inner, dict) else None,
+        },
+        "visibility": p.get("visibility"),
+        "confidence": p.get("confidence"),
+        "jerseyNum": p.get("jerseyNum"),
     }
 
 
-def _slim_ball(b):
-    """Reduz uma posição de bola do tracking só aos campos usados (x, y, z)."""
+def _parse_ball(b):
+    """Normaliza uma posição de bola do tracking pro schema completo (x, y, z, visibility)."""
     if not isinstance(b, dict):
         return None
-    return {"x": b.get("x"), "y": b.get("y"), "z": b.get("z")}
+    return {
+        "x": b.get("x"),
+        "y": b.get("y"),
+        "z": b.get("z"),
+        "visibility": b.get("visibility"),
+    }
 
 
 def _stringify_details(d):
@@ -119,9 +140,10 @@ def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
     - Renomeia colunas com ponto pra camelCase (id -> eventId, player.id -> eventPlayerId, ...).
     - Deriva eventSubTypeDescription/eventOutcomeDescription a partir de details + eventType
       (mesma lógica que antes só existia em parse_possession_events.ipynb).
-    - Reduz homePlayers/awayPlayers/balls só aos campos usados e converte os valores de
-      details pra string — mas mantém tudo como estrutura nativa (dict/list), sem
-      serializar pra JSON string, pra já gravar tipado no parquet (ver NESTED_SCHEMA_OVERRIDES).
+    - Normaliza homePlayers/awayPlayers/balls pro schema completo original (x, y,
+      player.id/name, visibility, confidence, jerseyNum / x, y, z, visibility) e converte
+      os valores de details pra string — mas mantém tudo como estrutura nativa (dict/list),
+      sem serializar pra JSON string, pra já gravar tipado no parquet (ver NESTED_SCHEMA_OVERRIDES).
       Renomeia essas 4 colunas com sufixo _parsed ao final, por convenção.
     - Tipa homeTeam como boolean nulo e os IDs como inteiros nulos.
     """
@@ -150,10 +172,10 @@ def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
 
     for c in ["homePlayers", "awayPlayers"]:
         if c in df.columns:
-            df[c] = df[c].map(lambda lst: [_slim_player(p) for p in lst] if isinstance(lst, list) else [])
+            df[c] = df[c].map(lambda lst: [_parse_player(p) for p in lst] if isinstance(lst, list) else [])
 
     if "balls" in df.columns:
-        df["balls"] = df["balls"].map(lambda lst: [_slim_ball(b) for b in lst] if isinstance(lst, list) else [])
+        df["balls"] = df["balls"].map(lambda lst: [_parse_ball(b) for b in lst] if isinstance(lst, list) else [])
 
     # homeTeam como boolean nulo
     if "homeTeam" in df.columns:
@@ -301,14 +323,15 @@ async def process_group(group_df):
 
     # Diretório por competição/temporada
     events_dir = BASE_EVENTS_DIR / f"{competition_id}" / f"{season}"
+
+    # Overwrite completo: apaga a pasta inteira antes de escrever, em vez de só os
+    # arquivos que batem com o padrão esperado — evita que sobras de execuções
+    # anteriores (ex: parquet gerado por outro pipeline) fiquem misturadas aqui.
+    if events_dir.exists():
+        shutil.rmtree(events_dir)
     events_dir.mkdir(parents=True, exist_ok=True)
 
-    # Limpa possíveis arquivos/índice anteriores
-    for p in events_dir.glob(f"events_{competition_id}_{season}*.parquet"):
-        p.unlink(missing_ok=True)
     index_path = events_dir / f"events_{competition_id}_{season}_index.json"
-    if index_path.exists():
-        index_path.unlink(missing_ok=True)
 
     # Define split em 2 shards (primeiro recebe o +1 se total for ímpar)
     mid = math.ceil(total / 2)
