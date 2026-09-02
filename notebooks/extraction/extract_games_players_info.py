@@ -26,6 +26,33 @@ OUTPUT_PATH = BASE_DATA_DIR / "games_players.csv"
 
 client = GradientSportsClient()
 
+# Dicionário de posições (playerPosition -> descrição + categoria ampla D/M/A),
+# baseado em positions.md. GK entra como D (goleiro conta como linha
+# defensiva na categoria ampla, conforme o dicionário). LWB/RWB e AM têm
+# maior risco de classificação errada por sigla fixa (ver positions.md) —
+# mapeados aqui pelo prior da tabela, sem ajuste dinâmico pela posição em campo.
+POSITION_INFO = {
+    "GK":  ("Goalkeeper", "D"),
+    "LB":  ("Left Back", "D"),
+    "RB":  ("Right Back", "D"),
+    "LCB": ("Left Centre-Back", "D"),
+    "RCB": ("Right Centre-Back", "D"),
+    "MCB": ("Middle Centre-Back", "D"),
+    "D":   ("Defender", "D"),
+    "LWB": ("Left Wing-Back", "D"),
+    "RWB": ("Right Wing-Back", "D"),
+    "DM":  ("Defensive Midfielder", "M"),
+    "CM":  ("Central Midfielder", "M"),
+    "M":   ("Midfielder", "M"),
+    "AM":  ("Attacking Midfielder", "M"),
+    "LM":  ("Left Midfielder", "M"),
+    "RM":  ("Right Midfielder", "M"),
+    "LW":  ("Left Winger", "A"),
+    "RW":  ("Right Winger", "A"),
+    "F":   ("Forward", "A"),
+    "CF":  ("Centre-Forward", "A"),
+}
+
 
 async def fetch_game_players(game_id, index, total):
     async with semaphore:
@@ -90,6 +117,21 @@ async def main():
     game_ids = games['gameId'].unique().tolist()
 
     df_games_players = await fetch_all_games_players(game_ids)
+
+    # Enriquece playerPosition com descrição e categoria ampla (D/M/A) —
+    # playerPosition em si já é o "type"; essas duas colunas viram
+    # typeDescription/groupType quando o dado for aninhado em target_engineering.ipynb.
+    # Sigla fora de POSITION_INFO (positions.md desatualizado) -> ambas ficam NULL
+    unknown_positions = sorted(set(df_games_players["playerPosition"].dropna()) - set(POSITION_INFO))
+    if unknown_positions:
+        print(f"Atenção: siglas de posição fora de POSITION_INFO (ficarão NULL): {unknown_positions}")
+
+    df_games_players["playerPositionTypeDescription"] = df_games_players["playerPosition"].map(
+        lambda p: POSITION_INFO.get(p, (None, None))[0]
+    )
+    df_games_players["playerPositionGroupType"] = df_games_players["playerPosition"].map(
+        lambda p: POSITION_INFO.get(p, (None, None))[1]
+    )
 
     df_games_players.to_csv(str(OUTPUT_PATH), index=False)
     print(f"Saved {OUTPUT_PATH.name} with {len(df_games_players)} rows for {len(game_ids)} games")
