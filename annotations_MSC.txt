@@ -1,0 +1,150 @@
+# vantagem numérica -> proporcional
+# qtd de jogadores -> inversamente proporcional
+# progression -> proporcional
+
+# Target engineering:
+## Calcular as métricas de qtd total de jogadores e vantagem numérica pela campo todo, metade ou terço do campo (criar elas pros dois)
+    ### Para metade ou terço do campo, considerar só as regiões q tiver a bola e as outras ficam NULL para ver a agregação do threat_score só dessas regiões
+
+# Testes:
+
+## agregações das componentes e threat score por: 
+## 1) time-jogo-posse e 2) time-jogo-posse-ciclo de posse
+## avaliar olhando correlação com match-stats
+
+eventos que mostra que ainda tem erro na normalização:
+- 'ab4e43db215d4d9ea41758e7aef83382'
+- 
+- qualquer outro evento que tenha chute do lado esquerdo, ou seja, posição da bola seja <30 (distância mais provavel de ter chute)
+
+
+- Qualificação 
+- ⁠Fechar etapa de ameaça pensando como considerar corretamente as acoes defensivas e diferencial/impacto na ameaça 
+- ⁠Features iniciais separadas
+- ⁠O que fazer pra EDA?
+- ⁠Qual modelagem?
+
+não vamos olhar só os casos que teve ação defensiva, mas o escopo geral
+quanto melhor taticamente o time tá, menos ações defensivas o time precisa fazer
+olhar o comportamento da defesa em todos os casos pq as vzs o time sem ações defensivas já provoca mais ações  ofensivas ou defensivas que podem ser bons ou ruins
+
+agrupar ciclo pela média para o modelo que será por ciclo
+
+a gente quer considerar bola rolando, então só consideraria dps do escanteio por ex
+
+não considerar ciclo de posse com 1 evento
+
+considerar a criação das features inicialmente e dps avaliar os casos
+
+OBS:
+
+- Dá pra usar o L6 e usar a aderência do próximo mês. No ambiente antigo tivemos que fazer L1P5 pois os escopo de incentivos e ad"mais confiáveis" era 
+Rerodar EDA no novo ambiente com dados atualizados L6 considerando 6 meses anteriores e
+
+
+- analises extra (final do 2.)
+- rodei também para grupo de aderência e faixa de faturamento (L1P5)
+- documentação de resumo da EDA ,seleção de features e pontos de discussão em aberto no final
+
+
+* Levar lógica de join de games pro sanity de uma temporada também pra poder fazer o sanity
+- Continuar limpando arquivo de target_engineering passando os sanity checks para os arquivos de temporadas no geral e uma temporada (falta passar os de game_events)
+- Não criar "events" e "events_parsed" e sim um só desde o inicio (mudança estrutural mais pesada, mas é melhor do que duas pastas com 3.5GB cada armazenado localmente"
+- Iniciar script de feature_engineering: 
+         1) Montar prompt definindo variáveis pra criar 
+         2) Perdir pro Claude Code criar v0 delas e validações
+
+
+Agora você deve criar nesse notebook uma nova etapa envolvendo feature_engineering em uma v0 que iremos aprimorar. Irei te passar o passo a passo pra criar e o que deve ser feito, além de uma descrição das informações.
+
+1. Preparação dos dados
+1.1. Pegar a base de eventos da premier league 2022-2023 e games events
+1.2. Selecionar apenas as colunas que serão necessárias para o feature engineering
+1.3. Ver se há dados referentes à posição dos jogadores (ex: Jogador X, zagueiro) e também a formação do time
+1.4. Explodir os arrays com os dados de tracking dos jogadores
+
+Features:
+2.1. Team Surface Area = Convex hull formado pelos jogadores do time defendendo, exceto goleiro.
+
+2.2. Strech Index = Distância média dos jogadores ao centroide do time todo defendendo (calcular centroide tb)
+
+2.3. Distância intra/entre linhas:
+    2.3.1. Comprimento vertical de cada linha, obtida pela distância entre os jogadores das pontas (Intra linhas)
+    2.3.2. Distância entre o centroide dos jogadores de cada uma das linhas (Entre linhas)
+    2.3.3. Largura horizontal obtida pela distância entre o centróide da linha de defesa e o centróide da linha de ataque (Entre linhas)
+
+2.4. Superioridade numérica dinâmica:
+    2.4.1. Quantidade de atacantes e defensores no raio de 10m da bola
+    2.4.2. Quantidade de atacantes e defensores no raio de 20m da bola
+
+2.5. Altura da defesa:
+    2.5.1. Distância horizontal entre a linha vertical do gol até a linha vertical do jogador mais atrás do time defendendo (excluindo goleiro)
+    2.5.1. Distância linha vertical do gol até a linha vertical do centroide da linha defensiva
+    2.5.1. Distância entre a linha vertical do gol até a linha vertical
+
+
+
+- ansiedade pra voltar pra cá pra trabalhar/fazer coisa do mestrado qnd tomo o remédio (querer ser mt produtivo)
+
+- sinto remedio fazer menos efeito pq to com cansaço acumulado das semanas
+
+- tenho adicionado coisas pra fazer no meio dos dias de trabalho pra dar possibilidade de acontecerem e normalmente faço isso nas primeiras horas do venvanse q to motivado pra tudo, mas acho q fazer essas coisas me desorganiza mais no dia e me deixa mais ansioso com essa questão de querer ou sentir que preciso voltar a fazer as tarefas 
+
+- inclusive ja falaram no trabalho pra eu me atentar mais sobre muitas ausências
+
+- várias pessoas de ciencia de dados foram promovidas rapidamente de junior pra pleno e isso me deixou meio chateado/triste pq tb teve gnt que entrou comigo subindo e eu me senti atrasado
+
+- sexta tem MYC
+
+
+
+
+ponto 1:
+- criei quase todas as features e falta ver se tão fazendo sentido
+- só n criei pras métricas q envolve saber os jogadores da defesa, mas ainda preciso validar se:
+	- Ver se tem formação dos times nos dados das partidas
+	- Validar se a posição do jogador na partida se adequa à escalação
+
+- ponto 2:
+- decidir como iremos agrupar os dados (os dados não fazem sentido em todos os casos da partida)
+
+
+conversar com o artur focado no MYC:
+- oq é mais relevante trazer?
+
+ciclo que começa com tiro de meta
+ciclo com jogadores atrás
+
+eda:
+é relevante ter variação
+percentil 95
+max
+variação
+media
+mediana
+
+- montar uma percepção minha pra amanhã e levar pra ele
+
+1) O que você acha ser o mais relevante em responder na parte de estar pronto pra promoção? É seguido à risca se eu estou atendendo à TODOS os pontos definidos na régua para o cargo acima ou isso não é seguido de forma tão rígida e é mais considerado um overall das competências acima, meu status atual e uma percepção de potencial? Pq eu entendo que tem pontos que sou mt forte e alinhado com o cargo acima, enquanto que alguns eu melhorei nos últimos meses, mas enxergo ter potencial e to disposto a continuar me aperfeiçoando, mas no cargo acima.
+
+
+2) Eu fico na dúvida tb do que responder no ponto 3. Eu preparei uma resposta de como o desafio atual está influenciando no meu desenvolvimento profissional e se adequou aos meus interesses profissionais, mas nunca sei se é uma resposta pra dar sendo norteadora de onde vão me colocar em projetos futuros ou se é só para terem um feedback de se o cenário atual foi benéfico ou não para mim como profissional. Talvez possa ser os dois kkkk... O que vc acha que é esperado de ser respondido nessa?
+
+
+Eu vou te passar uma sequencia de tabelas e colunas e você deve fazer esse formato explicativo, mas pode ser só um markdown e um agregado em tabela no final.     
+
+
+
+
+
+Resumo
+Introdução
+Fundamentação Teórica
+Trabalhos Relacionados
+Metologia 
+Avaliação Experimental
+Considerações Finais
+
+
+
+
